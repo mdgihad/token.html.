@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Beehiiv Token System</title>
+<style>
+body{font-family:Arial,sans-serif;background:#f5f6fa;margin:0;padding:20px;text-align:center;}
+.container{max-width:600px;margin:auto;background:#fff;padding:20px;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.1);}
+input,button{padding:12px;margin:6px;width:90%;border-radius:8px;font-size:16px;}
+button{background:#00a8ff;color:#fff;border:none;cursor:pointer;}
+button:hover{background:#0097e6;}
+#adminPanel{display:none;margin-top:20px;}
+table{width:100%;border-collapse:collapse;margin-top:12px;}
+th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left;}
+.winner{background:#00d084;color:#fff;font-weight:bold;}
+.alert{background:#00a8ff;color:#fff;padding:10px;border-radius:8px;margin:10px 0;display:none;}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>🎁 Get Your Free Token</h1>
+<input id="name" placeholder="Enter your name"/>
+<button id="getTokenBtn">Get Token</button>
+<p id="result" class="alert"></p>
+
+<h2>🔑 Admin Panel</h2>
+<input id="adminPass" type="password" placeholder="Password"/>
+<button id="loginBtn">Login</button>
+<div id="adminPanel">
+<button id="pickWinnerBtn">Pick Winner</button>
+<div id="list"></div>
+</div>
+</div>
+
+<script type="module">
+// 🔹 Firebase Config
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "SENDER_ID",
+  appId: "APP_ID"
+};
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.25.0/firebase-app.js";
+import { getFirestore, doc, runTransaction, collection, addDoc, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/9.25.0/firebase-firestore.js";
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const btn = document.getElementById("getTokenBtn");
+const nameInput = document.getElementById("name");
+const result = document.getElementById("result");
+
+async function generateToken(name){
+  const countersRef = doc(db,"counters","tokens");
+  const newNumber = await runTransaction(db, async tx=>{
+    const snap = await tx.get(countersRef);
+    if(!snap.exists()){tx.set(countersRef,{last:1}); return 1;}
+    const last = snap.data().last||0;
+    const next = last+1;
+    tx.update(countersRef,{last:next});
+    return next;
+  });
+  await addDoc(collection(db,"tokens"), {tokenNumber:newNumber,name:name,created:new Date()});
+  return newNumber;
+}
+
+btn.onclick = async ()=>{
+  const name = nameInput.value.trim();
+  if(!name) return alert("Enter your name!");
+  const token = await generateToken(name);
+  result.innerHTML = `🎟️ Your Token Number: <b>#${token}</b>`;
+  result.style.display="block";
+  setTimeout(()=>{result.style.display="none";},3000);
+}
+
+// Admin panel
+const adminPass = "1234"; // Change this
+const loginBtn = document.getElementById("loginBtn");
+const adminPanel = document.getElementById("adminPanel");
+const listDiv = document.getElementById("list");
+const pickWinnerBtn = document.getElementById("pickWinnerBtn");
+
+loginBtn.onclick = ()=>{
+  const pass=document.getElementById("adminPass").value;
+  if(pass===adminPass){adminPanel.style.display="block"; loadTokens();}
+  else alert("Wrong password!");
+}
+
+async function loadTokens(){
+  const q=query(collection(db,"tokens"),orderBy("tokenNumber","asc"));
+  const snap=await getDocs(q);
+  let html="<table><tr><th>Token</th><th>Name</th></tr>";
+  snap.forEach(doc=>{
+    const d=doc.data();
+    html+=`<tr id="token${d.tokenNumber}"><td>#${d.tokenNumber}</td><td>${d.name}</td></tr>`;
+  });
+  html+="</table>";
+  listDiv.innerHTML=html;
+}
+
+pickWinnerBtn.onclick=async()=>{
+  const q=query(collection(db,"tokens"));
+  const snap=await getDocs(q);
+  const arr=[];
+  snap.forEach(d=>arr.push(d.data()));
+  if(arr.length===0) return alert("No tokens yet!");
+  const idx=Math.floor(Math.random()*arr.length);
+  const winner=arr[idx];
+  alert(`🏆 Winner: Token #${winner.tokenNumber} - ${winner.name}`);
+  const row=document.getElementById(`token${winner.tokenNumber}`);
+  if(row) row.classList.add("winner");
+}
+</script>
+</body>
+</html>
